@@ -7,7 +7,6 @@ import {
   TargetedEvent,
   TextInputFocusEventData,
   ColorValue,
-  ViewStyle,
 } from 'react-native';
 import { NativeStackNavigatorProps } from './native-stack/types';
 
@@ -39,8 +38,10 @@ export type StackAnimationTypes =
   | 'slide_from_bottom'
   | 'slide_from_right'
   | 'slide_from_left'
-  | 'ios';
+  | 'ios_from_right'
+  | 'ios_from_left';
 export type BlurEffectTypes =
+  | 'none'
   | 'extraLight'
   | 'light'
   | 'dark'
@@ -102,7 +103,6 @@ export interface ScreenProps extends ViewProps {
   active?: 0 | 1 | Animated.AnimatedInterpolation<number>;
   activityState?: 0 | 1 | 2 | Animated.AnimatedInterpolation<number>;
   children?: React.ReactNode;
-  unstable_footer?: React.ReactNode;
   /**
    * Boolean indicating that swipe dismissal should trigger animation provided by `stackAnimation`. Defaults to `false`.
    *
@@ -135,9 +135,9 @@ export interface ScreenProps extends ViewProps {
    */
   fullScreenSwipeEnabled?: boolean;
   /**
-   * Whether the full screen dismiss gesture has shadow under view during transition. The gesture uses custom transition and thus
-   * doesn't have a shadow by default. When enabled, a custom shadow view is added during the transition which tries to mimic the
-   * default iOS shadow. Defaults to `false`.
+   * Whether the full screen dismiss gesture has shadow under view during transition.
+   * When enabled, a custom shadow view is added during the transition which tries to mimic the
+   * default iOS shadow. Defaults to `true`.
    *
    * This does not affect the behavior of transitions that don't use gestures, enabled by `fullScreenGestureEnabled` prop.
    *
@@ -281,25 +281,32 @@ export interface ScreenProps extends ViewProps {
    */
   screenOrientation?: ScreenOrientationTypes;
   /**
-   * Allows to set background color for the `Screen` component itself.
-   * This might come handy when using `formSheet` stack presentation, when the content view is clipped.
-   *
-   * We plan to get rid of this prop once the workaround is no longer needed.
-   */
-  unstable_screenStyle?: Pick<ViewStyle, 'backgroundColor'>;
-  /**
    * Describes heights where a sheet can rest.
-   * Works only when `stackPresentation` is set to `formSheet`.
+   * Works only when `presentation` is set to `formSheet`.
    *
    * Heights should be described as fraction (a number from `[0, 1]` interval) of screen height / maximum detent height.
-   * There is also possibility to specify `[-1]` literal array with single element, which intets to set the sheet height
+   * You can pass an array of ascending values each defining allowed sheet detent. iOS accepts any number of detents,
+   * while **Android is limited to three**.
+   *
+   * There is also possibility to specify `fitToContents` literal, which intents to set the sheet height
    * to the height of its contents.
    *
-   * Please note that the array **must** be sorted in ascending order.
+   * Please note that the array **must** be sorted in ascending order. This invariant is verified only in developement mode,
+   * where violation results in error.
    *
-   * Defaults to `[1.0]` literal.
+   * **Android is limited to up 3 values in the array** -- any surplus values, beside first three are ignored.
+   *
+   * There are also legacy & **deprecated** options available:
+   *
+   * * 'medium' - corresponds to `[0.5]` detent value, around half of the screen height,
+   * * 'large' - corresponds to `[1.0]` detent value, maximum height,
+   * * 'all' - corresponds to `[0.5, 1.0]` value, the name is deceiving due to compatibility reasons.
+   *
+   * These are provided solely for **temporary** backward compatibility and are destined for removal in future versions.
+   *
+   * Defaults to `[1.0]`.
    */
-  sheetAllowedDetents?: number[];
+  sheetAllowedDetents?: number[] | 'fitToContents' | 'medium' | 'large' | 'all';
   /**
    * Integer value describing elevation of the sheet, impacting shadow on the top edge of the sheet.
    *
@@ -344,16 +351,40 @@ export interface ScreenProps extends ViewProps {
    * This prop can be set to an number, which indicates index of detent in `sheetAllowedDetents` array for which
    * there won't be a dimming view beneath the sheet.
    *
-   * Defaults to `-1`, indicating that the dimming view should be always present.
+   * If the specified index is out of bounds of `sheetAllowedDetents` array, in dev environment mode error will be thrown,
+   * in production the value will be reset to default value.
+   *
+   * Additionaly there are following options available:
+   *
+   * * `none` - there will be dimming view for all detents levels,
+   * * `last` - there won't be a dimming view for any detent level.
+   *
+   * There also legacy & **deprecated** prop values available: `medium`, `large` (don't confuse with `largest`), `all`, which work in tandem with
+   * corresponding legacy prop values for `sheetAllowedDetents` prop.
+   *
+   * These are provided solely for **temporary** backward compatibility and are destined for removal in future versions.
+   *
+   * Defaults to `none`, indicating that the dimming view should be always present.
    */
-  sheetLargestUndimmedDetent?: number;
+  sheetLargestUndimmedDetentIndex?:
+    | number
+    | 'none'
+    | 'last'
+    | 'medium' // deprecated
+    | 'large' // deprecated
+    | 'all'; // deprecated
   /**
    * Index of the detent the sheet should expand to after being opened.
    * Works only when `stackPresentation` is set to `formSheet`.
    *
+   * If the specified index is out of bounds of `sheetAllowedDetents` array, in dev environment more error will be thrown,
+   * in production the value will be reset to default value.
+   *
+   * Additionaly there is `last` value available, when set the sheet will expand initially to last (largest) detent.
+   *
    * Defaults to `0` - which represents first detent in the detents array.
    */
-  sheetInitialDetent?: number;
+  sheetInitialDetentIndex?: number | 'last';
   /**
    * How the screen should appear/disappear when pushed or popped at the top of the stack.
    * The following values are currently supported:
@@ -361,11 +392,12 @@ export interface ScreenProps extends ViewProps {
    * - "fade" – fades screen in or out
    * - "fade_from_bottom" – performs a fade from bottom animation
    * - "flip" – flips the screen, requires stackPresentation: "modal" (iOS only)
-   * - "simple_push" – performs a default animation, but without shadow and native header transition (iOS only)
+   * - "simple_push" – performs a default animation, but without native header transition (iOS only)
    * - `slide_from_bottom` – performs a slide from bottom animation
    * - "slide_from_right" - slide in the new screen from right to left (Android only, resolves to default transition on iOS)
    * - "slide_from_left" - slide in the new screen from left to right
-   * - "ios" - iOS like slide in animation (Android only, resolves to default transition on iOS)
+   * - "ios_from_right" - iOS like slide in animation. pushes in the new screen from right to left (Android only, resolves to default transition on iOS)
+   * - "ios_from_left" - iOS like slide in animation. pushes in the new screen from left to right (Android only, resolves to default transition on iOS)
    * - "none" – the screen appears/dissapears without an animation
    */
   stackAnimation?: StackAnimationTypes;
@@ -416,12 +448,25 @@ export interface ScreenProps extends ViewProps {
    */
   swipeDirection?: SwipeDirectionTypes;
   /**
-   * Changes the duration (in milliseconds) of `slide_from_bottom`, `fade_from_bottom`, `fade` and `simple_push` transitions on iOS. Defaults to `350`.
+   * Changes the duration (in milliseconds) of `slide_from_bottom`, `fade_from_bottom`, `fade` and `simple_push` transitions on iOS. Defaults to `500`.
    * The duration of `default` and `flip` transitions isn't customizable.
    *
    * @platform ios
    */
   transitionDuration?: number;
+  /**
+   * Footer component that can be used alongside formSheet stack presentation style.
+   *
+   * This option is provided, because due to implementation details it might be problematic
+   * to implement such layout with JS-only code.
+   *
+   * Please note that this prop is marked as unstable and might be subject of breaking changes,
+   * including removal, in particular when we find solution that will make implementing it with JS
+   * straightforward.
+   *
+   * @platform android
+   */
+  unstable_sheetFooter?: () => React.ReactNode;
 }
 
 export interface ScreenContainerProps extends ViewProps {
@@ -442,13 +487,12 @@ export interface GestureDetectorBridge {
   ) => void;
 }
 
-export interface ScreenStackProps extends ViewProps {
+export interface ScreenStackProps extends ViewProps, GestureProps {
   children?: React.ReactNode;
   /**
    * A callback that gets called when the current screen finishes its transition.
    */
   onFinishTransitioning?: (e: NativeSyntheticEvent<TargetedEvent>) => void;
-  gestureDetectorBridge?: React.MutableRefObject<GestureDetectorBridge>;
   ref?: React.MutableRefObject<React.Ref<View>>;
 }
 
@@ -753,4 +797,69 @@ export interface SearchBarProps {
    * @default true
    */
   shouldShowHintSearchIcon?: boolean;
+}
+
+/**
+ * Custom Screen Transition
+ */
+
+/**
+ * copy from GestureHandler to avoid strong dependency
+ */
+export type PanGestureHandlerEventPayload = {
+  x: number;
+  y: number;
+  absoluteX: number;
+  absoluteY: number;
+  translationX: number;
+  translationY: number;
+  velocityX: number;
+  velocityY: number;
+};
+
+/**
+ * copy from Reanimated to avoid strong dependency
+ */
+export type GoBackGesture =
+  | 'swipeRight'
+  | 'swipeLeft'
+  | 'swipeUp'
+  | 'swipeDown'
+  | 'verticalSwipe'
+  | 'horizontalSwipe'
+  | 'twoDimensionalSwipe';
+
+export interface MeasuredDimensions {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pageX: number;
+  pageY: number;
+}
+
+export type AnimatedScreenTransition = {
+  topScreenStyle: (
+    event: PanGestureHandlerEventPayload,
+    screenSize: MeasuredDimensions,
+  ) => Record<string, unknown>;
+  belowTopScreenStyle: (
+    event: PanGestureHandlerEventPayload,
+    screenSize: MeasuredDimensions,
+  ) => Record<string, unknown>;
+};
+
+export type ScreensRefsHolder = Record<string, React.RefObject<View>>;
+
+export interface GestureProps {
+  screensRefs?: React.MutableRefObject<ScreensRefsHolder>;
+  currentScreenId?: string;
+  goBackGesture?: GoBackGesture;
+  transitionAnimation?: AnimatedScreenTransition;
+  screenEdgeGesture?: boolean;
+}
+
+export interface GestureProviderProps extends GestureProps {
+  children?: React.ReactNode;
+  gestureDetectorBridge: React.MutableRefObject<GestureDetectorBridge>;
 }

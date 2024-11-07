@@ -1,3 +1,5 @@
+'use client';
+
 import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
 import type { ViewProps, ColorValue } from 'react-native';
 import type {
@@ -56,7 +58,8 @@ type StackAnimation =
   | 'slide_from_left'
   | 'slide_from_bottom'
   | 'fade_from_bottom'
-  | 'ios';
+  | 'ios_from_right'
+  | 'ios_from_left';
 
 type SwipeDirection = 'vertical' | 'horizontal';
 
@@ -83,7 +86,7 @@ export interface NativeProps extends ViewProps {
   sheetElevation?: WithDefault<Int32, 24>;
   customAnimationOnSwipe?: boolean;
   fullScreenSwipeEnabled?: boolean;
-  fullScreenSwipeShadowEnabled?: boolean;
+  fullScreenSwipeShadowEnabled?: WithDefault<boolean, true>;
   homeIndicatorHidden?: boolean;
   preventNativeDismiss?: boolean;
   gestureEnabled?: WithDefault<boolean, true>;
@@ -96,7 +99,7 @@ export interface NativeProps extends ViewProps {
   gestureResponseDistance?: GestureResponseDistanceType;
   stackPresentation?: WithDefault<StackPresentation, 'push'>;
   stackAnimation?: WithDefault<StackAnimation, 'default'>;
-  transitionDuration?: WithDefault<Int32, 350>;
+  transitionDuration?: WithDefault<Int32, 500>;
   replaceAnimation?: WithDefault<ReplaceAnimation, 'pop'>;
   swipeDirection?: WithDefault<SwipeDirection, 'horizontal'>;
   hideKeyboardOnSwipe?: boolean;
